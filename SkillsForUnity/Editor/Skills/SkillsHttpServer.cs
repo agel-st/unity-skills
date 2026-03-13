@@ -1137,68 +1137,55 @@ namespace UnitySkills
                     string url = $"http://{host}:{port}/health";
                     bool success = false;
                     string lastError = null;
+                    var connectAddresses = GetSelfTestAddresses(host);
 
                     for (int attempt = 1; attempt <= 3 && !success && _isRunning; attempt++)
                     {
                         if (attempt > 1) Thread.Sleep(attempt * 1500); // 3s, 4.5s backoff
 
-                        try
+                        foreach (var address in connectAddresses)
                         {
-                            using (var tcp = new System.Net.Sockets.TcpClient())
+                            if (!_isRunning)
+                                return;
+
+                            try
                             {
-                                // Async connect with timeout
-                                var ar = tcp.BeginConnect(host, port, null, null);
-                                if (!ar.AsyncWaitHandle.WaitOne(3000))
+                                if (!TryReadSelfTestResponse(address, host, port, out string response, out string error))
                                 {
-                                    tcp.Close();
-                                    lastError = "TCP connect timed out";
+                                    lastError = error;
                                     continue;
                                 }
-                                tcp.EndConnect(ar);
 
-                                tcp.ReceiveTimeout = 5000;
-                                tcp.SendTimeout = 2000;
-
-                                var stream = tcp.GetStream();
-
-                                // Send raw HTTP/1.0 request — bypasses proxy, WinHTTP, ServicePoint
-                                var httpReq = $"GET /health HTTP/1.0\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n";
-                                var reqBytes = Encoding.ASCII.GetBytes(httpReq);
-                                stream.Write(reqBytes, 0, reqBytes.Length);
-
-                                // Read response
-                                var sb = new StringBuilder();
-                                var buf = new byte[4096];
-                                int read;
-                                while ((read = stream.Read(buf, 0, buf.Length)) > 0)
-                                    sb.Append(Encoding.UTF8.GetString(buf, 0, read));
-
-                                var response = sb.ToString();
                                 if (response.Contains("200") && response.Contains("\"status\""))
                                 {
                                     SkillsLogger.LogSuccess($"[Self-Test] {url} -> OK");
                                     success = true;
+                                    break;
                                 }
                                 else if (response.Length > 0)
                                 {
-                                    // Got a response (e.g., 400 Bad Request from HTTP.sys) — server is reachable
                                     var firstLine = response.Split('\n')[0].Trim();
+                                    // Retry localhost on other loopback addresses before logging a warning.
+                                    if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) &&
+                                        firstLine.IndexOf("400", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        lastError = $"{firstLine} via {address}";
+                                        continue;
+                                    }
+
                                     SkillsLogger.LogWarning($"[Self-Test] {url} -> {firstLine}");
                                     success = true;
+                                    break;
                                 }
                                 else
                                 {
-                                    lastError = "Empty response";
+                                    lastError = $"Empty response via {address}";
                                 }
                             }
-                        }
-                        catch (Exception ex) when (attempt < 3)
-                        {
-                            lastError = ex.InnerException?.Message ?? ex.Message;
-                        }
-                        catch (Exception ex)
-                        {
-                            lastError = ex.InnerException?.Message ?? ex.Message;
+                            catch (Exception ex)
+                            {
+                                lastError = $"{ex.InnerException?.Message ?? ex.Message} via {address}";
+                            }
                         }
                     }
 
@@ -1231,6 +1218,95 @@ namespace UnitySkills
                 if (occupied.Count > 0)
                     SkillsLogger.LogWarning($"[Self-Test] Occupied ports (8090-8100): {string.Join(", ", occupied)}");
             });
+        }
+
+        private static List<IPAddress> GetSelfTestAddresses(string host)
+        {
+            var addresses = new List<IPAddress>();
+
+            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    foreach (var address in Dns.GetHostAddresses(host))
+                    {
+                        if (IPAddress.IsLoopback(address) && !addresses.Contains(address))
+                            addresses.Add(address);
+                    }
+                }
+                catch
+                {
+                    // Fall back to known loopback addresses below.
+                }
+
+                addresses.Sort((left, right) =>
+                {
+                    int leftRank = left.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 0 : 1;
+                    int rightRank = right.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 0 : 1;
+                    return leftRank.CompareTo(rightRank);
+                });
+
+                if (!addresses.Contains(IPAddress.Loopback))
+                    addresses.Insert(0, IPAddress.Loopback);
+                if (!addresses.Contains(IPAddress.IPv6Loopback))
+                    addresses.Add(IPAddress.IPv6Loopback);
+
+                return addresses;
+            }
+
+            if (IPAddress.TryParse(host, out var parsedAddress))
+            {
+                addresses.Add(parsedAddress);
+                return addresses;
+            }
+
+            foreach (var address in Dns.GetHostAddresses(host))
+            {
+                if (!addresses.Contains(address))
+                    addresses.Add(address);
+            }
+
+            return addresses;
+        }
+
+        private static bool TryReadSelfTestResponse(IPAddress address, string hostHeader, int port, out string response, out string error)
+        {
+            response = null;
+            error = null;
+
+            using (var tcp = new System.Net.Sockets.TcpClient(address.AddressFamily))
+            {
+                var ar = tcp.BeginConnect(address, port, null, null);
+                if (!ar.AsyncWaitHandle.WaitOne(3000))
+                {
+                    tcp.Close();
+                    error = "TCP connect timed out";
+                    return false;
+                }
+
+                tcp.EndConnect(ar);
+                tcp.ReceiveTimeout = 5000;
+                tcp.SendTimeout = 2000;
+
+                var stream = tcp.GetStream();
+                var httpReq =
+                    $"GET /health HTTP/1.1\r\n" +
+                    $"Host: {hostHeader}:{port}\r\n" +
+                    "User-Agent: UnitySkills-SelfTest\r\n" +
+                    "Accept: application/json\r\n" +
+                    "Connection: close\r\n\r\n";
+                var reqBytes = Encoding.ASCII.GetBytes(httpReq);
+                stream.Write(reqBytes, 0, reqBytes.Length);
+
+                var sb = new StringBuilder();
+                var buf = new byte[4096];
+                int read;
+                while ((read = stream.Read(buf, 0, buf.Length)) > 0)
+                    sb.Append(Encoding.UTF8.GetString(buf, 0, read));
+
+                response = sb.ToString();
+                return true;
+            }
         }
     }
 }
