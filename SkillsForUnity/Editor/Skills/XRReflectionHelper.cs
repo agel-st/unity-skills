@@ -239,10 +239,46 @@ namespace UnitySkills
                 }
             }
 
-            // Fallback: try ComponentSkills.FindComponentType which uses a broader search strategy
-            var fallback = ComponentSkills.FindComponentType(shortName);
+            // Fallback: scan all types by simple name (same strategy as ComponentSkills.FindComponentType)
+            var fallback = FindTypeBySimpleName(shortName);
             _typeCache[cacheKey] = fallback;
             return fallback;
+        }
+
+        /// <summary>
+        /// Find a Component type by simple name, scanning all assemblies.
+        /// This is the broadest search — slower but handles assembly loading edge cases.
+        /// </summary>
+        private static Type FindTypeBySimpleName(string simpleName)
+        {
+            if (string.IsNullOrEmpty(simpleName)) return null;
+
+            var cacheKey = $"__simple__{simpleName}";
+            if (_typeCache.TryGetValue(cacheKey, out var cached)) return cached;
+
+            Type result = null;
+
+            // Search all types in all assemblies by simple name (case-insensitive)
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var t in asm.GetTypes())
+                    {
+                        if (t.Name.Equals(simpleName, StringComparison.OrdinalIgnoreCase) &&
+                            typeof(Component).IsAssignableFrom(t))
+                        {
+                            result = t;
+                            break;
+                        }
+                    }
+                    if (result != null) break;
+                }
+                catch { /* ignore assemblies that fail to enumerate */ }
+            }
+
+            _typeCache[cacheKey] = result;
+            return result;
         }
 
         // ==================================================================================
@@ -252,7 +288,7 @@ namespace UnitySkills
         /// <summary>
         /// Add an XR component to a GameObject using reflection.
         /// Returns the added component, or null on failure.
-        /// Uses ResolveXRType first, then falls back to ComponentSkills.FindComponentType.
+        /// Uses ResolveXRType first, then falls back to full assembly scan.
         /// </summary>
         public static Component AddXRComponent(GameObject go, string typeName)
         {
@@ -260,9 +296,9 @@ namespace UnitySkills
 
             var type = ResolveXRType(typeName);
 
-            // Ultimate fallback: ComponentSkills uses a broader search strategy (all types in all assemblies)
+            // Ultimate fallback: scan all types in all assemblies by simple name
             if (type == null)
-                type = ComponentSkills.FindComponentType(typeName);
+                type = FindTypeBySimpleName(typeName);
 
             if (type == null) return null;
 
@@ -279,7 +315,7 @@ namespace UnitySkills
         public static Component GetXRComponent(GameObject go, string typeName)
         {
             if (go == null) return null;
-            var type = ResolveXRType(typeName) ?? ComponentSkills.FindComponentType(typeName);
+            var type = ResolveXRType(typeName) ?? FindTypeBySimpleName(typeName);
             if (type == null) return null;
             return go.GetComponent(type);
         }
