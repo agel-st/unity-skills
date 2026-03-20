@@ -246,11 +246,12 @@ namespace UnitySkills
             };
         }
 
-        [UnitySkill("component_set_property", "Set a property/field on a component. Supports Vector2/3/4, Color, references by name/path", TracksWorkflow = true)]
+        [UnitySkill("component_set_property", "Set a property/field on a component. Supports Vector2/3/4, Color, scene references by name/path, project assets by assetPath", TracksWorkflow = true)]
         public static object ComponentSetProperty(
-            string name = null, int instanceId = 0, string path = null, 
-            string componentType = null, string propertyName = null, 
-            string value = null, string referencePath = null, string referenceName = null)
+            string name = null, int instanceId = 0, string path = null,
+            string componentType = null, string propertyName = null,
+            string value = null, string referencePath = null, string referenceName = null,
+            string assetPath = null)
         {
             if (string.IsNullOrEmpty(componentType) || string.IsNullOrEmpty(propertyName))
                 return new { error = "componentType and propertyName are required" };
@@ -283,8 +284,15 @@ namespace UnitySkills
                 var targetType = prop?.PropertyType ?? field.FieldType;
                 object converted;
 
-                // Handle reference types (Transform, GameObject, Component references)
-                if (!string.IsNullOrEmpty(referencePath) || !string.IsNullOrEmpty(referenceName))
+                // Handle asset references (Project assets: ScriptableObject, Prefab, Material, Texture, etc.)
+                if (!string.IsNullOrEmpty(assetPath))
+                {
+                    converted = ResolveAssetReference(targetType, assetPath);
+                    if (converted == null)
+                        return new { error = $"Asset not found or type mismatch: '{assetPath}' (expected {targetType.Name})" };
+                }
+                // Handle scene references (Transform, GameObject, Component references)
+                else if (!string.IsNullOrEmpty(referencePath) || !string.IsNullOrEmpty(referenceName))
                 {
                     converted = ResolveReference(targetType, referencePath, referenceName);
                     if (converted == null)
@@ -321,7 +329,7 @@ namespace UnitySkills
             }
         }
 
-        [UnitySkill("component_set_property_batch", "Set properties on multiple components (Efficient). items: JSON array of {name, componentType, propertyName, value, referencePath, referenceName}", TracksWorkflow = true)]
+        [UnitySkill("component_set_property_batch", "Set properties on multiple components (Efficient). items: JSON array of {name, componentType, propertyName, value, referencePath, referenceName, assetPath}", TracksWorkflow = true)]
         public static object ComponentSetPropertyBatch(string items)
         {
             return BatchExecutor.Execute<BatchSetPropertyItem>(items, item =>
@@ -352,7 +360,13 @@ namespace UnitySkills
                 var targetType = prop?.PropertyType ?? field.FieldType;
                 object converted;
 
-                if (!string.IsNullOrEmpty(item.referencePath) || !string.IsNullOrEmpty(item.referenceName))
+                if (!string.IsNullOrEmpty(item.assetPath))
+                {
+                    converted = ResolveAssetReference(targetType, item.assetPath);
+                    if (converted == null)
+                        throw new System.Exception($"Asset not found or type mismatch: '{item.assetPath}' (expected {targetType.Name})");
+                }
+                else if (!string.IsNullOrEmpty(item.referencePath) || !string.IsNullOrEmpty(item.referenceName))
                 {
                     converted = ResolveReference(targetType, item.referencePath, item.referenceName);
                     if (converted == null)
@@ -386,6 +400,7 @@ namespace UnitySkills
             public object value { get; set; }
             public string referencePath { get; set; }
             public string referenceName { get; set; }
+            public string assetPath { get; set; }
         }
 
         [UnitySkill("component_get_properties", "Get all properties of a component (supports name/instanceId/path)")]
@@ -799,6 +814,24 @@ namespace UnitySkills
                 return targetGo;
             if (typeof(Component).IsAssignableFrom(targetType))
                 return targetGo.GetComponent(targetType);
+
+            return null;
+        }
+
+        /// <summary>
+        /// Resolve a reference to a project asset by asset path.
+        /// Supports any UnityEngine.Object: ScriptableObject, Prefab (GameObject), Material, Texture, AudioClip, etc.
+        /// </summary>
+        private static object ResolveAssetReference(System.Type targetType, string assetPath)
+        {
+            // Try loading with exact target type first
+            var asset = AssetDatabase.LoadAssetAtPath(assetPath, targetType);
+            if (asset != null) return asset;
+
+            // Fallback: load as generic Object and check assignability
+            asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath);
+            if (asset != null && targetType.IsAssignableFrom(asset.GetType()))
+                return asset;
 
             return null;
         }

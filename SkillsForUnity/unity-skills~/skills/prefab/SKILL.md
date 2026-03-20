@@ -22,6 +22,7 @@ description: "Prefab management. Use when users want to create, instantiate, app
 - `prefab_apply_overrides` - Apply overrides to prefab
 - `prefab_create_variant` - Create a prefab variant
 - `prefab_find_instances` - Find all instances of a prefab in scene
+- `prefab_set_property` - Set a property on a component inside a Prefab asset (supports basic types, vectors, colors, and asset references)
 
 ---
 
@@ -139,6 +140,49 @@ Find all instances of a prefab in the current scene.
 | `limit` | int | No | 50 | Maximum number of instances to return |
 
 **Returns:** `{ success, prefabPath, count, instances: [{ name, path, instanceId }] }`
+
+### prefab_set_property
+Set a property on a component inside a Prefab asset file (without instantiating it). Supports basic types, vectors, colors, enums, and asset references.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `prefabPath` | string | Yes | - | Path to the prefab asset |
+| `componentType` | string | Yes | - | Component type name |
+| `propertyName` | string | Yes | - | Serialized property name |
+| `value` | string | Cond. | null | Value for basic types (int/float/bool/string/enum/vector/color) |
+| `assetReferencePath` | string | Cond. | null | Asset path for Object reference fields (Material, Texture, AudioClip, ScriptableObject, etc.) |
+| `gameObjectName` | string | No | null | Child object name inside prefab (defaults to root) |
+
+> Provide either `value` (basic types) or `assetReferencePath` (asset references).
+
+**Returns:** `{ success, prefabPath, gameObject, component, property, valueSet }`
+
+```python
+# Set a float property on prefab root
+unity_skills.call_skill("prefab_set_property",
+    prefabPath="Assets/Prefabs/Enemy.prefab",
+    componentType="EnemyStats",
+    propertyName="maxHealth",
+    value="100"
+)
+
+# Assign an asset reference to a prefab component
+unity_skills.call_skill("prefab_set_property",
+    prefabPath="Assets/Prefabs/Enemy.prefab",
+    componentType="AudioSource",
+    propertyName="m_audioClip",
+    assetReferencePath="Assets/Audio/hit.wav"
+)
+
+# Edit a child object inside a prefab
+unity_skills.call_skill("prefab_set_property",
+    prefabPath="Assets/Prefabs/Player.prefab",
+    componentType="MeshRenderer",
+    propertyName="m_Materials.Array.data[0]",
+    assetReferencePath="Assets/Materials/PlayerSkin.mat",
+    gameObjectName="Body"
+)
+```
 
 ---
 

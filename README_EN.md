@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-2022.3%2B-black?style=for-the-badge&logo=unity" alt="Unity">
-  <img src="https://img.shields.io/badge/Skills-512-green?style=for-the-badge" alt="Skills">
+  <img src="https://img.shields.io/badge/Skills-513-green?style=for-the-badge" alt="Skills">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License"></a>
 </p>
 
@@ -30,7 +30,7 @@ This project is a deep refactoring and feature extension based on the excellent 
 ## 🚀 Core Features
 
 - ⚡ **Ultimate Efficiency**: Supports **Result Truncation** and **SKILL.md** optimization to maximize token savings.
-- 🛠️ **Comprehensive Toolkit**: Built-in **512 REST Skills** plus **14 advisory design modules**, with **Batch** operations that significantly reduce HTTP overhead and improve execution efficiency.
+- 🛠️ **Comprehensive Toolkit**: Built-in **513 REST Skills** plus **14 advisory design modules**, with **Batch** operations that significantly reduce HTTP overhead and improve execution efficiency.
 - 🛡️ **Safety First**: Supports **Transactional** (atomic operations) with automatic rollback on failure, leaving no residue in scenes.
 - 🌍 **Multi-Instance Support**: Automatic port discovery and global registry, enabling simultaneous control of multiple Unity projects.
 - 🤖 **Deep Integration**: Exclusive support for **Antigravity Slash Commands**, unlocking the `/unity-skills` interactive experience.
@@ -144,7 +144,7 @@ If you're using other tools that support Skills, install according to the Skills
 
 ---
 
-## 📦 Skills Category Overview (512)
+## 📦 Skills Category Overview (513)
 
 | Category | Count | Core Functions |
 | :--- | :---: | :--- |
@@ -177,7 +177,7 @@ If you're using other tools that support Skills, install according to the Skills
 | **Event** | 10 | UnityEvent listener management/Batch add/Copy/State control/List |
 | **Smart** | 10 | Scene SQL query/Spatial query/Auto layout/Snap to ground/Grid snap/Randomize/Replace |
 | **Test** | 10 | Test run/Run by name/Categories/Template create/Summary statistics |
-| **Prefab** | 10 | Create/Instantiate/Override apply & revert/Batch instantiate/Variants/Find instances |
+| **Prefab** | 11 | Create/Instantiate/Override apply & revert/Batch instantiate/Variants/Find instances/Asset property editing |
 | **Component** | 10 | Add/Remove/Property config/Batch operations/Copy/Enable-Disable |
 | **Optimization** | 10 | Texture compression/Mesh compression/Audio compression/Scene analysis/Static flags/LOD/Duplicate materials/Overdraw |
 | **Profiler** | 10 | FPS/Memory/Texture/Mesh/Material/Audio/Rendering stats/Object count/AssetBundle |
@@ -205,7 +205,7 @@ If you're using other tools that support Skills, install according to the Skills
 │   │   │   └── unity_skills.py     # Python Client Library
 │   │   ├── skills/                 # Modular Skill Documentation + 13 advisory modules
 │   │   └── references/             # Unity Development References
-│   └── Editor/Skills/              # Core Skill Logic (40 *Skills.cs files, 512 Skills)
+│   └── Editor/Skills/              # Core Skill Logic (40 *Skills.cs files, 513 Skills)
 │       ├── SkillsHttpServer.cs     # HTTP Server Core (Producer-Consumer)
 │       ├── SkillRouter.cs          # Request Routing & Reflection-based Skill Discovery
 │       ├── WorkflowManager.cs      # Persistent Workflow (Task/Session/Snapshot)
@@ -217,7 +217,7 @@ If you're using other tools that support Skills, install according to the Skills
 │       ├── CinemachineSkills.cs    # Cinemachine 2.x/3.x (23 skills)
 │       ├── WorkflowSkills.cs       # Workflow Undo/Rollback (22 skills)
 │       ├── PerceptionSkills.cs     # Scene Understanding (11 skills)
-│       └── ...                     # 512 Skills source code
+│       └── ...                     # 513 Skills source code
 ├── docs/
 │   └── SETUP_GUIDE.md              # Complete Setup & Usage Guide
 ├── CHANGELOG.md                    # Version Update Log

@@ -2,6 +2,20 @@
 
 All notable changes to **UnitySkills** will be documented in this file.
 
+## [1.6.5] - 2026-03-20
+
+### Added
+- **`component_set_property` 新增 `assetPath` 参数**：支持将 Project Asset（ScriptableObject、Prefab、Material、Texture、AudioClip 等）赋值给组件的 Object 引用字段。通过 `AssetDatabase.LoadAssetAtPath` 加载资产，支持精确类型匹配与降级兼容。`component_set_property_batch` 同步支持。
+- **`prefab_set_property` (1 skill)**：新增 Prefab 资产属性编辑技能，通过 `SerializedObject` + `SerializedProperty` 直接编辑 Prefab Asset 文件的组件字段（无需实例化到场景）。支持：
+  - 基本类型（int/float/bool/string/enum）、Vector2/3/4、Color、Rect、Bounds、LayerMask
+  - Asset 引用赋值（通过 `assetReferencePath` 参数）
+  - Prefab 内子对象编辑（通过 `gameObjectName` 参数）
+  - 属性名自动回退（`propertyName` → `m_PropertyName` → `_propertyName` → `m_propertyName`）
+
+### Changed
+- **REST Skills 总数**：512 → 513（+1 prefab_set_property）。
+- **Prefab 模块**：10 → 11 skills。
+
 ## [1.6.4] - 2026-03-15
 
 ### Added

@@ -93,7 +93,7 @@ unity_skills.call_skill("gameobject_create_batch",
 
 ## Coverage Summary
 
-- Unity REST skills: 512
+- Unity REST skills: 513
 - Advisory design modules: 14
 - Core runtime modules: 38
 - Total documented module folders: 52

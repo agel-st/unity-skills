@@ -9,7 +9,7 @@ Use this skill when the user wants to automate the Unity Editor through the loca
 
 Current package snapshot:
 
-- `512` REST skills
+- `513` REST skills
 - `14` advisory design modules
 - Unity maintenance baseline: `2022.3+`
 - Default request timeout: `15 minutes`

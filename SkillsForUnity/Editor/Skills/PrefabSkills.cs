@@ -259,5 +259,230 @@ namespace UnitySkills
 
             return new { success = true, prefabPath, count = instances.Length, instances };
         }
+
+        [UnitySkill("prefab_set_property", "Set a property on a component inside a Prefab asset file. Supports basic types (int/float/bool/string/enum), vectors, colors, and asset references via assetReferencePath", TracksWorkflow = true)]
+        public static object PrefabSetProperty(
+            string prefabPath = null, string componentType = null, string propertyName = null,
+            string value = null, string assetReferencePath = null, string gameObjectName = null)
+        {
+            if (Validate.Required(prefabPath, "prefabPath") is object reqErr1) return reqErr1;
+            if (Validate.SafePath(prefabPath, "prefabPath") is object pathErr) return pathErr;
+            if (Validate.Required(componentType, "componentType") is object reqErr2) return reqErr2;
+            if (Validate.Required(propertyName, "propertyName") is object reqErr3) return reqErr3;
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null) return new { error = $"Prefab not found: {prefabPath}" };
+
+            // Find target GameObject inside prefab (root or child by name)
+            GameObject targetGo = prefab;
+            if (!string.IsNullOrEmpty(gameObjectName))
+            {
+                var child = prefab.transform.Find(gameObjectName);
+                if (child == null)
+                {
+                    // Deep search
+                    foreach (var t in prefab.GetComponentsInChildren<Transform>(true))
+                    {
+                        if (t.name == gameObjectName) { child = t; break; }
+                    }
+                }
+                if (child == null)
+                    return new { error = $"Child GameObject '{gameObjectName}' not found in prefab" };
+                targetGo = child.gameObject;
+            }
+
+            // Find component
+            var compType = ComponentSkills.FindComponentType(componentType);
+            if (compType == null)
+                return new { error = $"Component type not found: {componentType}" };
+
+            var comp = targetGo.GetComponent(compType);
+            if (comp == null)
+                return new { error = $"Component '{componentType}' not found on '{targetGo.name}' in prefab" };
+
+            // Use SerializedObject to edit prefab asset
+            var so = new SerializedObject(comp);
+            var prop = FindSerializedProperty(so, propertyName);
+            if (prop == null)
+                return new { error = $"Property '{propertyName}' not found on {componentType}", availableProperties = ListSerializedProperties(so) };
+
+            WorkflowManager.SnapshotObject(comp);
+
+            // Set value based on property type
+            if (!string.IsNullOrEmpty(assetReferencePath))
+            {
+                if (prop.propertyType != SerializedPropertyType.ObjectReference)
+                    return new { error = $"Property '{propertyName}' is not an Object reference field (type: {prop.propertyType})" };
+
+                var asset = AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetReferencePath);
+                if (asset == null)
+                    return new { error = $"Asset not found: {assetReferencePath}" };
+
+                prop.objectReferenceValue = asset;
+            }
+            else if (!string.IsNullOrEmpty(value))
+            {
+                if (!SetSerializedPropertyValue(prop, value))
+                    return new { error = $"Failed to set value '{value}' on property '{propertyName}' (type: {prop.propertyType})" };
+            }
+            else
+            {
+                return new { error = "Either 'value' or 'assetReferencePath' must be provided" };
+            }
+
+            so.ApplyModifiedProperties();
+            EditorUtility.SetDirty(comp);
+            AssetDatabase.SaveAssets();
+
+            return new
+            {
+                success = true,
+                prefabPath,
+                gameObject = targetGo.name,
+                component = componentType,
+                property = propertyName,
+                valueSet = !string.IsNullOrEmpty(assetReferencePath) ? assetReferencePath : value
+            };
+        }
+
+        #region Prefab SerializedProperty Helpers
+
+        /// <summary>
+        /// Find a SerializedProperty by name with Unity naming convention fallbacks (m_PropertyName, _propertyName).
+        /// </summary>
+        private static SerializedProperty FindSerializedProperty(SerializedObject so, string propertyName)
+        {
+            // Direct match
+            var prop = so.FindProperty(propertyName);
+            if (prop != null) return prop;
+
+            // Unity convention: m_PropertyName
+            var mName = "m_" + char.ToUpper(propertyName[0]) + propertyName.Substring(1);
+            prop = so.FindProperty(mName);
+            if (prop != null) return prop;
+
+            // Underscore prefix: _propertyName
+            prop = so.FindProperty("_" + propertyName);
+            if (prop != null) return prop;
+
+            // Try lowercase first char with m_ prefix
+            var mLower = "m_" + propertyName;
+            prop = so.FindProperty(mLower);
+            if (prop != null) return prop;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Set a SerializedProperty value from a string. Returns true on success.
+        /// </summary>
+        private static bool SetSerializedPropertyValue(SerializedProperty prop, string value)
+        {
+            switch (prop.propertyType)
+            {
+                case SerializedPropertyType.Integer:
+                    if (int.TryParse(value, out var intVal)) { prop.intValue = intVal; return true; }
+                    if (long.TryParse(value, out var longVal)) { prop.longValue = longVal; return true; }
+                    return false;
+
+                case SerializedPropertyType.Float:
+                    if (float.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var floatVal))
+                    { prop.floatValue = floatVal; return true; }
+                    if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var doubleVal))
+                    { prop.doubleValue = doubleVal; return true; }
+                    return false;
+
+                case SerializedPropertyType.Boolean:
+                    var lower = value.ToLower().Trim();
+                    prop.boolValue = lower == "true" || lower == "1" || lower == "yes" || lower == "on";
+                    return true;
+
+                case SerializedPropertyType.String:
+                    prop.stringValue = value;
+                    return true;
+
+                case SerializedPropertyType.Enum:
+                    // Try name match first
+                    if (prop.enumDisplayNames != null)
+                    {
+                        for (int i = 0; i < prop.enumDisplayNames.Length; i++)
+                        {
+                            if (string.Equals(prop.enumDisplayNames[i], value, System.StringComparison.OrdinalIgnoreCase))
+                            { prop.enumValueIndex = i; return true; }
+                        }
+                    }
+                    // Try index
+                    if (int.TryParse(value, out var enumIdx)) { prop.enumValueIndex = enumIdx; return true; }
+                    return false;
+
+                case SerializedPropertyType.Color:
+                    var color = ComponentSkills.ConvertValue(value, typeof(Color));
+                    if (color is Color c) { prop.colorValue = c; return true; }
+                    return false;
+
+                case SerializedPropertyType.Vector2:
+                    var v2 = ComponentSkills.ConvertValue(value, typeof(Vector2));
+                    if (v2 is Vector2 vec2) { prop.vector2Value = vec2; return true; }
+                    return false;
+
+                case SerializedPropertyType.Vector3:
+                    var v3 = ComponentSkills.ConvertValue(value, typeof(Vector3));
+                    if (v3 is Vector3 vec3) { prop.vector3Value = vec3; return true; }
+                    return false;
+
+                case SerializedPropertyType.Vector4:
+                    var v4 = ComponentSkills.ConvertValue(value, typeof(Vector4));
+                    if (v4 is Vector4 vec4) { prop.vector4Value = vec4; return true; }
+                    return false;
+
+                case SerializedPropertyType.Rect:
+                    var rect = ComponentSkills.ConvertValue(value, typeof(Rect));
+                    if (rect is Rect r) { prop.rectValue = r; return true; }
+                    return false;
+
+                case SerializedPropertyType.Bounds:
+                    var bounds = ComponentSkills.ConvertValue(value, typeof(Bounds));
+                    if (bounds is Bounds b) { prop.boundsValue = b; return true; }
+                    return false;
+
+                case SerializedPropertyType.Vector2Int:
+                    var v2i = ComponentSkills.ConvertValue(value, typeof(Vector2Int));
+                    if (v2i is Vector2Int vec2i) { prop.vector2IntValue = vec2i; return true; }
+                    return false;
+
+                case SerializedPropertyType.Vector3Int:
+                    var v3i = ComponentSkills.ConvertValue(value, typeof(Vector3Int));
+                    if (v3i is Vector3Int vec3i) { prop.vector3IntValue = vec3i; return true; }
+                    return false;
+
+                case SerializedPropertyType.LayerMask:
+                    if (int.TryParse(value, out var mask)) { prop.intValue = mask; return true; }
+                    var layer = LayerMask.NameToLayer(value);
+                    if (layer >= 0) { prop.intValue = 1 << layer; return true; }
+                    return false;
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// List top-level serialized properties for error diagnostics.
+        /// </summary>
+        private static string[] ListSerializedProperties(SerializedObject so)
+        {
+            var names = new System.Collections.Generic.List<string>();
+            var prop = so.GetIterator();
+            bool enter = true;
+            while (prop.NextVisible(enter) && names.Count < 30)
+            {
+                enter = false;
+                if (prop.name == "m_Script") continue;
+                names.Add(prop.name);
+            }
+            return names.ToArray();
+        }
+
+        #endregion
     }
 }

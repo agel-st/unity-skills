@@ -67,7 +67,12 @@ Set a component property value.
 | `instanceId` | int | No* | Instance ID |
 | `componentType` | string | Yes | Component type |
 | `propertyName` | string | Yes | Property to set |
-| `value` | any | Yes | New value |
+| `value` | any | Cond. | New value (for basic types, vectors, colors) |
+| `referencePath` | string | No | Scene object hierarchy path (for scene references) |
+| `referenceName` | string | No | Scene object name (for scene references) |
+| `assetPath` | string | No | Project asset path (for asset references: Material, Texture, AudioClip, ScriptableObject, Prefab, etc.) |
+
+> Provide one of: `value` (basic types), `referencePath`/`referenceName` (scene objects), or `assetPath` (project assets).
 
 **Returns**: `{success, gameObject, componentType, property, oldValue, newValue}`
 
